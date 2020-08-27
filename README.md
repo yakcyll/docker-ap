@@ -40,7 +40,7 @@ country ES: DFS-ETSI
 * Using host networking:
 
 ```
-sudo docker run -d -t -e INTERFACE=wlan0 --net host --privileged offlinehacker/docker-ap
+sudo docker run -i -t -e INTERFACE=wlan1 -e OUTGOINGS=wlan0 --net host --privileged won10/hostapd
 ```
 
 * Using network interface reattaching:
@@ -59,7 +59,7 @@ and have deterministic environment with wifi interface.
 ## Environment variables
 
 * **INTERFACE**: name of the interface to use for wifi access point (default: wlan0)
-* **OUTGOING**: outgoing network interface (default: eth0)
+* **OUTGOINGS**: outgoing network interface (default: eth0)
 * **CHANNEL**: WIFI channel (default: 6)
 * **SUBNET**: Network subnet (default: 192.168.254.0)
 * **AP_ADDR**: Access point address (default: 192.168.254.1)
