@@ -1,2 +1,3 @@
 #!/bin/bash
-docker run -i -t -e INTERFACE=wlan0 -e OUTGOINGS=eth0 --net host --privileged won10/hostapd
+docker run -it -d --name hostapd -e INTERFACE=wlp1s0 -e BRIDGE=br0 --net host --privileged --restart=unless-stopped docker-ap 
+

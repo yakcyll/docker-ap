@@ -1,13 +1,12 @@
-# Docker container stack: hostap + dhcp server 
+# Docker container stack: bridged hostap
 
-This container starts wireless access point (hostap) and dhcp server in docker
-container. It supports both host networking and network interface reattaching
-to container network namespace modes (host and guest).
+This image starts a wireless access point (hostap) in a Docker container. It utilizes bridge-utils to create a bridge between the WLAN interface and the LAN (cabled Ethernet) interface, thus dropping the requirement for a separate DHCP server. Because of the intricacies of networking in this scenario, this remix was only tested using host networking in docker.
+
+This repository does not do a very good job of isolating all the necessary interface work inside the container. It is much better suited to be used on a dedicated system. Pull requests, especially with an update to wlanstart.sh with brctl commands, are welcome.
 
 ## Requirements
 
-On the host system install required wifi drivers, then make sure your wifi adapter
-supports AP mode:
+On the host system, make sure your WLAN interface is available (`ip link`), then make sure your Wi-Fi adapter supports AP mode:
 
 ```
 # iw list
@@ -37,38 +36,59 @@ country ES: DFS-ETSI
 
 ## Build / run
 
-* Using host networking:
+* Configure the bridge:
 
 ```
-sudo docker run -i -t -e INTERFACE=wlan1 -e OUTGOINGS=wlan0 --net host --privileged won10/hostapd
+# export ETH_IF=enp2s0  # replace the interface identifier here
+# export BR_IF=br0  # replace the interface identifier here
+# apt-get install bridge-utils
+# sed -i "s/br0/${BR_IF}/g" etc-network-interfaces.append
+# sed -i "s/enp2s0/${ETH_IF}/g" etc-network-interfaces.append
+# cat etc-network-interfaces.append >> /etc/network/interfaces
+# reboot
 ```
 
-* Using network interface reattaching:
+* Remove the `br_netfilter` module:
 
 ```
-sudo docker run -d -t -e INTERFACE=wlan0 -v /var/run/docker.sock:/var/run/docker.sock --privileged offlinehacker/docker-ap
+# rmmod br_netfilter
 ```
 
-This mode requires access to docker socket, so it can run a short lived
-container that reattaches network interface to network namespace of this
-container. It also renames wifi interface to **wlan0**, so you get
-deterministic networking environment. This mode can be usefull for example for
-pentesting, where can you use docker compose to run other wifi hacking tools
-and have deterministic environment with wifi interface.
+This is the easiest way to pass IPv4 traffic between wireless clients and the rest of the LAN.
+
+A more permanent solution ([a fake install](https://wiki.debian.org/KernelModuleBlacklisting)):
+
+```
+# cp etc-modprobe.d-br-netfilter.conf /etc/modprobe.d/
+# reboot
+```
+
+* Build the image:
+
+```
+# docker build -t docker-ap -f Dockerfile .
+```
+
+* Run using host networking:
+
+```
+# docker run -it -d --name hostapd -e INTERFACE=wlp1s0 -e BRIDGE=br0 --net host --privileged --restart=unless-stopped docker-ap 
+```
+
+The AP will be available for as long as the container is run and started on boot; if you want it to live until shutdown, remove the `--restart` option.
 
 ## Environment variables
 
-* **INTERFACE**: name of the interface to use for wifi access point (default: wlan0)
-* **OUTGOINGS**: outgoing network interface (default: eth0)
+* **INTERFACE**: name of the interface to use for wifi access point (default: wlp1s0)
+* **BRIDGE**: bridge interface created with bridge-utils (default: br0)
 * **CHANNEL**: WIFI channel (default: 6)
-* **SUBNET**: Network subnet (default: 192.168.254.0)
-* **AP_ADDR**: Access point address (default: 192.168.254.1)
 * **SSID**: Access point SSID (default: docker-ap)
 * **WPA_PASSPHRASE**: WPA password (default: passw0rd)
 * **HW_MODE**: WIFI mode to use (default: g) 
-* **DRIVER**: WIFI driver to use (default: nl80211)
-* **HT_CAPAB**: WIFI HT capabilities for 802.11n (default: [HT40-][SHORT-GI-20][SHORT-GI-40]) 
-* **MODE**: Mode to run in guest/host (default: host)
+* **DRIVER**: WIFI driver to use (default: nl80211, likely there's no need to modify it to match the host)
+* **HT_CAPAB**: WIFI HT capabilities for 802.11n (default: [HT40-][HT40+])
+
+They are passed to a new /etc/hostapd.conf inside the container. For reference, [check out this example](https://w1.fi/cgit/hostap/plain/hostapd/hostapd.conf).
 
 ## License
 
@@ -76,7 +96,7 @@ MIT
 
 ## Author
 
-Jaka Hudoklin <jakahudoklin@gmail.com>
+Jaka Hudoklin (jakahudoklin at gmail dot com)    
+Marcin Dzieżyc (yakcyll at gmail dot com)
 
-Thanks to https://github.com/sdelrio/rpi-hostap for providing original
-implementation.
+Thanks to https://github.com/sdelrio/rpi-hostap for providing the original implementation.
